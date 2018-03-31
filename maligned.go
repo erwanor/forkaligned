@@ -68,21 +68,30 @@ func malign(pos token.Pos, str *types.Struct, verbose bool) {
 	if sz == opt {
 		return
 	}
-	if !verbose {
-		fmt.Printf("%s: struct of size %d could be %d\n", fset.Position(pos), sz, opt)
-		return
+
+	fmt.Printf("%s: struct of size %d could be %d\n", fset.Position(pos), sz, opt)
+
+	if verbose {
+		prettyPrint(fields)
 	}
-	fmt.Printf("%s: struct of size %d could be %d with struct{\n", fset.Position(pos), sz, opt)
-	var w int
+}
+
+func prettyPrint(fields []*types.Var) {
+	var width int
 	for _, f := range fields {
-		if n := len(f.Name()); n > w {
-			w = n
+		if n := len(f.Name()); n > width {
+			width = n
 		}
 	}
-	spaces := strings.Repeat(" ", w)
+
+	spaces := strings.Repeat(" ", width)
+
+	fmt.Println("struct {")
+
 	for _, f := range fields {
 		fmt.Printf("\t%s%s\t%s,\n", f.Name(), spaces[len(f.Name()):], f.Type().String())
 	}
+
 	fmt.Println("}")
 }
 
@@ -97,7 +106,7 @@ func optimalSize(str *types.Struct, sizes *gcSizes, stable bool) (int64, []*type
 		alignofs[i] = sizes.Alignof(ft)
 		sizeofs[i] = sizes.Sizeof(ft)
 	}
-	if stable { // Stable keeps as much of the order as possible, but slower
+	if stable {
 		sort.Stable(&byAlignAndSize{fields, alignofs, sizeofs})
 	} else {
 		sort.Sort(&byAlignAndSize{fields, alignofs, sizeofs})

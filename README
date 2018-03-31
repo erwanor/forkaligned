@@ -1,7 +1,14 @@
 Install:
 
-    go get github.com/mdempsky/maligned
+    go get github.com/aaronwinter/forkaligned
+    go install github.com/aaronwinter/forkaligned
 
 Usage:
 
     maligned cmd/compile/internal/gc cmd/link/internal/ld
+
+    maligned -v
+
+    maligned -v -gc
+
+Maintainership status: maintained, feature requests welcome

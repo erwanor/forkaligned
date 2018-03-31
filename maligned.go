@@ -19,6 +19,34 @@ import (
 	"golang.org/x/tools/go/loader"
 )
 
+// Reference: go/types.StdSizes
+var basicSizes = [...]byte{
+	types.Bool:       1,
+	types.Int8:       1,
+	types.Int16:      2,
+	types.Int32:      4,
+	types.Int64:      8,
+	types.Uint8:      1,
+	types.Uint16:     2,
+	types.Uint32:     4,
+	types.Uint64:     8,
+	types.Float32:    4,
+	types.Float64:    8,
+	types.Complex64:  8,
+	types.Complex128: 16,
+}
+
+type gcSizes struct {
+	WordSize int64
+	MaxAlign int64
+}
+
+type byAlignAndSize struct {
+	fields   []*types.Var
+	alignofs []int64
+	sizeofs  []int64
+}
+
 var fset = token.NewFileSet()
 
 func main() {
@@ -76,25 +104,6 @@ func malign(pos token.Pos, str *types.Struct, verbose bool) {
 	}
 }
 
-func prettyPrint(fields []*types.Var) {
-	var width int
-	for _, f := range fields {
-		if n := len(f.Name()); n > width {
-			width = n
-		}
-	}
-
-	spaces := strings.Repeat(" ", width)
-
-	fmt.Println("struct {")
-
-	for _, f := range fields {
-		fmt.Printf("\t%s%s\t%s,\n", f.Name(), spaces[len(f.Name()):], f.Type().String())
-	}
-
-	fmt.Println("}")
-}
-
 func optimalSize(str *types.Struct, sizes *gcSizes, stable bool) (int64, []*types.Var) {
 	nf := str.NumFields()
 	fields := make([]*types.Var, nf)
@@ -112,12 +121,6 @@ func optimalSize(str *types.Struct, sizes *gcSizes, stable bool) (int64, []*type
 		sort.Sort(&byAlignAndSize{fields, alignofs, sizeofs})
 	}
 	return sizes.Sizeof(types.NewStruct(fields, nil)), fields
-}
-
-type byAlignAndSize struct {
-	fields   []*types.Var
-	alignofs []int64
-	sizeofs  []int64
 }
 
 func (s *byAlignAndSize) Len() int { return len(s.fields) }
@@ -147,13 +150,6 @@ func (s *byAlignAndSize) Less(i, j int) bool {
 	}
 
 	return false
-}
-
-// Code below based on go/types.StdSizes.
-
-type gcSizes struct {
-	WordSize int64
-	MaxAlign int64
 }
 
 func (s *gcSizes) Alignof(T types.Type) int64 {
@@ -188,22 +184,6 @@ func (s *gcSizes) Alignof(T types.Type) int64 {
 		return s.MaxAlign
 	}
 	return a
-}
-
-var basicSizes = [...]byte{
-	types.Bool:       1,
-	types.Int8:       1,
-	types.Int16:      2,
-	types.Int32:      4,
-	types.Int64:      8,
-	types.Uint8:      1,
-	types.Uint16:     2,
-	types.Uint32:     4,
-	types.Uint64:     8,
-	types.Float32:    4,
-	types.Float64:    8,
-	types.Complex64:  8,
-	types.Complex128: 16,
 }
 
 func (s *gcSizes) Sizeof(T types.Type) int64 {
@@ -258,4 +238,23 @@ func (s *gcSizes) Sizeof(T types.Type) int64 {
 func align(x, a int64) int64 {
 	y := x + a - 1
 	return y - y%a
+}
+
+func prettyPrint(fields []*types.Var) {
+	var width int
+	for _, f := range fields {
+		if n := len(f.Name()); n > width {
+			width = n
+		}
+	}
+
+	spaces := strings.Repeat(" ", width)
+
+	fmt.Println("struct {")
+
+	for _, f := range fields {
+		fmt.Printf("\t%s%s\t%s,\n", f.Name(), spaces[len(f.Name()):], f.Type().String())
+	}
+
+	fmt.Println("}")
 }

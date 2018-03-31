@@ -13,7 +13,6 @@ import (
 	"go/types"
 	"log"
 	"sort"
-	"strings"
 
 	"github.com/kisielk/gotool"
 	"golang.org/x/tools/go/loader"
@@ -47,10 +46,15 @@ type byAlignAndSize struct {
 	sizeofs  []int64
 }
 
+type byPointer struct {
+	fields []*types.Var
+}
+
 var fset = token.NewFileSet()
 
 func main() {
-	flagVerbose := flag.Bool("v", false, "verbose: print field order suggestions")
+	flagVerbose := flag.Bool("v", false, "verbose: show optimized structure")
+	flagGC := flag.Bool("gc", false, "gc: organize structure to reduce garbage collection scans")
 	flag.Parse()
 
 	importPaths := gotool.ImportPaths(flag.Args())
@@ -72,7 +76,7 @@ func main() {
 		for _, file := range pkg.Files {
 			ast.Inspect(file, func(node ast.Node) bool {
 				if s, ok := node.(*ast.StructType); ok {
-					malign(node.Pos(), pkg.Types[s].Type.(*types.Struct), *flagVerbose)
+					malign(node.Pos(), pkg.Types[s].Type.(*types.Struct), *flagVerbose, *flagGC)
 				}
 				return true
 			})
@@ -80,7 +84,7 @@ func main() {
 	}
 }
 
-func malign(pos token.Pos, str *types.Struct, verbose bool) {
+func malign(pos token.Pos, str *types.Struct, verbose, gcOptimization bool) {
 	wordSize := int64(8)
 	maxAlign := int64(8)
 	switch build.Default.GOARCH {
@@ -100,7 +104,7 @@ func malign(pos token.Pos, str *types.Struct, verbose bool) {
 	fmt.Printf("%s: struct of size %d could be %d\n", fset.Position(pos), sz, opt)
 
 	if verbose {
-		prettyPrint(fields)
+		prettyPrint(fields, gcOptimization)
 	}
 }
 
@@ -240,20 +244,34 @@ func align(x, a int64) int64 {
 	return y - y%a
 }
 
-func prettyPrint(fields []*types.Var) {
-	var width int
-	for _, f := range fields {
-		if n := len(f.Name()); n > width {
-			width = n
-		}
+// Implement sorting for pointer fields in struct
+func (f byPointer) Len() int {
+	return len(f.fields)
+}
+
+func (f byPointer) Swap(i, j int) {
+	f.fields[i], f.fields[j] = f.fields[j], f.fields[i]
+}
+
+func (f byPointer) Less(i, j int) bool {
+	// If it's a pointer, it starts with uint8 == 42
+	// I'm not proud of myself.
+	if f.fields[i].Type().String()[0] == 42 {
+		return true
 	}
 
-	spaces := strings.Repeat(" ", width)
+	return false
+}
+
+func prettyPrint(fields []*types.Var, gcOptimization bool) {
+	if gcOptimization {
+		sort.Stable(byPointer{fields: fields})
+	}
 
 	fmt.Println("struct {")
 
 	for _, f := range fields {
-		fmt.Printf("\t%s%s\t%s,\n", f.Name(), spaces[len(f.Name()):], f.Type().String())
+		fmt.Printf("\t%s\t%s,\n", f.Name(), f.Type().String())
 	}
 
 	fmt.Println("}")
